@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:laboratorio04/app/view/components/h1.dart';
 import 'package:laboratorio04/app/model/task.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class TaskListPage extends StatefulWidget {
   const TaskListPage({super.key});
@@ -10,8 +12,40 @@ class TaskListPage extends StatefulWidget {
 }
 
 class _TaskListPageState extends State<TaskListPage> {
-  final taskList = <Task>[
-  ];
+  final taskList = <Task>[];
+  bool _isLoading = true; // Indicador de carga
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTasks(); // Cargamos las tareas al iniciar
+  }
+
+  // Método para cargar tareas desde SharedPreferences
+  Future<void> _loadTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final tasksJson = prefs.getStringList('tasks') ?? [];
+    
+    setState(() {
+      taskList.clear();
+      for (var taskString in tasksJson) {
+        final taskMap = json.decode(taskString);
+        taskList.add(Task.fromJson(taskMap));
+      }
+      _isLoading = false;
+    });
+  }
+
+  // Método para guardar tareas en SharedPreferences
+  Future<void> _saveTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    final tasksJson = taskList.map((task) => 
+      json.encode(task.toJson())
+    ).toList();
+    
+    await prefs.setStringList('tasks', tasksJson);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +77,9 @@ class _TaskListPageState extends State<TaskListPage> {
           ),
         ],
       ),
-      body: Column(
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
@@ -179,11 +215,13 @@ class _TaskListPageState extends State<TaskListPage> {
                       onTap: () {
                         setState(() {
                           taskList[index].done = !taskList[index].done;
+                          _saveTasks(); // Guardar después de marcar completada
                         });
                       },
                       onDelete: () {
                         setState(() {
                           taskList.removeAt(index);
+                          _saveTasks(); // Guardar después de eliminar
                         });
                       },
                     ),
@@ -221,6 +259,7 @@ class _TaskListPageState extends State<TaskListPage> {
             onTaskAdded: (title) {
               setState(() {
                 taskList.add(Task(title));
+                _saveTasks(); // Guardar después de añadir
               });
             },
           ),
@@ -283,20 +322,14 @@ class _NewTaskModalState extends State<_NewTaskModal> {
                 onPressed: () => _controller.clear(),
               ),
             ),
-            style: const TextStyle(color: Colors.black), // Add this style
+            style: const TextStyle(color: Colors.black),
             maxLines: 2,
             textInputAction: TextInputAction.done,
             onFieldSubmitted: (_) => _addTask(),
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () {
-              if (_controller.text.isNotEmpty) {
-                final text = _controller.text.trim();
-                widget.onTaskAdded(text);
-                Navigator.of(context).pop();
-              }
-            },
+            onPressed: _addTask,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
